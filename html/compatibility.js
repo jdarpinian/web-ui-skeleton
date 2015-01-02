@@ -14,6 +14,44 @@
  * limitations under the License.
  */
 
+parseQueryString = function(encodedString, useArrays) {
+  // strip a leading '?' from the encoded string
+  var qstr = (encodedString[0] == "?") ? encodedString.substring(1) :
+                                         encodedString;
+  var pairs = qstr.replace(/\+/g, "%20").split(/(\&amp\;|\&\#38\;|\&#x26;|\&)/);
+  var o = {};
+  var decode;
+  if (typeof(decodeURIComponent) != "undefined") {
+    decode = decodeURIComponent;
+  } else {
+    decode = unescape;
+  }
+  if (useArrays) {
+    for (var i = 0; i < pairs.length; i++) {
+      var pair = pairs[i].split("=");
+      if (pair.length !== 2) {
+        continue;
+      }
+      var name = decode(pair[0]);
+      var arr = o[name];
+      if (!(arr instanceof Array)) {
+        arr = [];
+        o[name] = arr;
+      }
+      arr.push(decode(pair[1]));
+    }
+  } else {
+    for (i = 0; i < pairs.length; i++) {
+      pair = pairs[i].split("=");
+      if (pair.length !== 2) {
+        continue;
+      }
+      o[decode(pair[0])] = decode(pair[1]);
+    }
+  }
+  return o;
+};
+
 var capitalize = function(s) {
   var firstLetter = s.slice(0, 1);
   var rest = s.slice(1);

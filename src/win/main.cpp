@@ -15,124 +15,8 @@
  */
 
 #include "stdafx.h"
-#include "../latency-benchmark.h"
-#include "../screenscraper.h"
-#include "../clioptions.h"
-
-void run_server(clioptions*);
-
-static BOOL (APIENTRY *wglSwapIntervalEXT)(int) = 0;
-static HGLRC context = NULL;
-static uint8_t pattern[pattern_bytes];
-static int scrolls = 0;
-static int key_downs = 0;
-static int esc_presses = 0;
-
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-  int64_t paint_time = get_nanoseconds();
-  switch(msg) {
-  case WM_DESTROY:
-    PostQuitMessage(0);
-    break;
-  case WM_MOUSEWHEEL:
-    scrolls++;
-    InvalidateRect(hwnd, NULL, false);
-    break;
-  case WM_KEYDOWN:
-    if (wParam == VK_ESCAPE) {
-      esc_presses++;
-    }
-    key_downs++;
-    InvalidateRect(hwnd, NULL, false);
-    break;
-  case WM_PAINT:
-    PAINTSTRUCT ps;
-    BeginPaint(hwnd, &ps);
-    wglMakeCurrent(ps.hdc, context);
-    draw_pattern_with_opengl(pattern, scrolls, key_downs, esc_presses);
-    SwapBuffers(ps.hdc);
-    EndPaint(hwnd, &ps);
-    break;
-  default:
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-  }
-  return 0;
-}
-
-
-static const char *window_class_name = "window_class_name";
-void message_loop(HANDLE parent_process) {
-  WNDCLASS window_class;
-  if (!GetClassInfo(GetModuleHandle(NULL), window_class_name, &window_class)) {
-    memset(&window_class, 0, sizeof(WNDCLASS));
-    window_class.hInstance = GetModuleHandle(NULL);
-    window_class.lpszClassName = window_class_name;
-    window_class.hbrBackground = (HBRUSH)(COLOR_WINDOWTEXT + 1);
-    window_class.lpfnWndProc = WndProc;
-    ATOM a = RegisterClass(&window_class);
-    assert(a);
-  }
-  HWND native_reference_window = NULL;
-  native_reference_window = CreateWindowEx(WS_EX_TOPMOST, // Top most window and No taskbar button
-                                window_class_name,
-                                "Web Latency Benchmark test window",
-                                WS_DISABLED | WS_POPUP, // Borderless and user-inputs Disabled
-                                200, 200, pattern_pixels, 1,
-                                NULL, NULL, window_class.hInstance, NULL);
-  assert(native_reference_window);
-  PIXELFORMATDESCRIPTOR pfd;
-  ZeroMemory(&pfd, sizeof(pfd));
-  pfd.nSize = sizeof(pfd);
-  pfd.nVersion = 1;
-  pfd.dwFlags = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | PFD_DOUBLEBUFFER | PFD_DEPTH_DONTCARE;
-  pfd.iPixelType = PFD_TYPE_RGBA;
-  pfd.cColorBits = 32;
-  HDC hdc = GetDC(native_reference_window);
-  int pixel_format = ChoosePixelFormat(hdc, &pfd);
-  assert(pixel_format);
-  if (!SetPixelFormat(hdc, pixel_format, &pfd)) {
-    debug_log("SetPixelFormat failed");
-    exit(1);
-  }
-  context = wglCreateContext(hdc);
-  assert(context);
-  if (!wglMakeCurrent(hdc, context)) {
-    debug_log("Failed to init OpenGL");
-    exit(1);
-  }
-  wglSwapIntervalEXT = (BOOL (APIENTRY *)(int)) wglGetProcAddress("wglSwapIntervalEXT");
-  if (wglSwapIntervalEXT == NULL) {
-    debug_log("Failed to get wglSwapIntervalEXT");
-    exit(1);
-  }
-  if (!wglSwapIntervalEXT(0)) {
-    debug_log("Failed to disable vsync");
-    exit(1);
-  }
-  ReleaseDC(native_reference_window, hdc);
-  ShowWindow(native_reference_window, SW_SHOWNORMAL);
-  SetWindowPos(native_reference_window, HWND_TOPMOST, 0, 0, 0, 0,
-      SWP_NOMOVE | SWP_NOSIZE);
-  SetForegroundWindow(native_reference_window);
-  UpdateWindow(native_reference_window);
-
-  MSG msg;
-  while(1) {
-    while(!PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-      InvalidateRect(native_reference_window, NULL, false);
-      if (parent_process && WaitForSingleObject(parent_process, 0) != WAIT_TIMEOUT) {
-        debug_log("parent process died, exiting");
-        exit(1);
-      }
-      usleep(1000);
-    }
-    if (msg.message == WM_QUIT)
-      break;
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
-  }
-}
+#include "../pal.h"
+#include "../server.h"
 
 // Override the default behavior for assertion failures to break into the
 // debugger.
@@ -183,34 +67,10 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
   // Prevent automatic DPI scaling.
   SetProcessDPIAware();
 
-  clioptions opts;
-  parse_commandline(__argc, (const char **)__argv, &opts);
-
-  if (opts.magic_pattern) {
-    assert(opts.parent_handle);
-    debug_log("opening native reference window");
-    // The -p argument is the magic pattern to draw on the window, encoded as hex.
-    memset(pattern, 0, sizeof(pattern));
-    if (!parse_hex_magic_pattern(opts.magic_pattern, pattern)) {
-      debug_log("Failed to parse pattern");
-      return 1;
-    }
-    // The -h argument is the HANDLE of the parent process, encoded as hex.
-    HANDLE parent_process = (HANDLE)_strtoui64(opts.parent_handle, NULL, 16);
-    message_loop(parent_process);
-    return 0;
-  }
+  flags flags;
+  parse_commandline(__argc, (const char **)__argv, &flags);
 
   debug_log("running server");
-  HDC desktop = GetDC(NULL);
-  assert(desktop);
-  if (GetDeviceCaps(desktop, LOGPIXELSX) != 96) {
-    MessageBox(NULL, "Unfortunately, due to browser bugs you must set the Windows DPI scaling factor to \"100%\" or \"Smaller\" (96 DPI) for this test to work. Please change it and reboot.",
-                "Unsupported DPI", MB_ICONERROR | MB_OK);
-    WinExec("DpiScaling.exe", SW_NORMAL);
-    return 1;
-  }
-  ReleaseDC(NULL, desktop);
-  run_server(&opts);
+  run_server(&flags);
   return 0;
 }

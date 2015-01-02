@@ -19,8 +19,7 @@
 // are changed infrequently
 //
 
-#ifndef WLB_WIN_STDAFX_H_
-#define WLB_WIN_STDAFX_H_
+#pragma once
 
 // Including SDKDDKVer.h defines the highest available Windows platform.
 
@@ -47,19 +46,7 @@
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "ole32.lib")
 
-#pragma comment(lib, "d3d11.lib")
-#include <d3d11.h>
-#pragma comment(lib, "dxgi.lib")
-#include <dxgi1_2.h>
-#pragma comment(lib, "dwmapi.lib")
-#include <dwmapi.h>
 #include <stdio.h>
 #include <assert.h>
 #include <crtdbg.h>
-#include "../screenscraper.h"
-#pragma comment(lib, "shell32.lib")
-#include <shellapi.h>
-#include <gl/GL.h>
-#pragma comment(lib, "opengl32.lib")
-
-#endif  // WLB_WIN_STDAFX_H_
+#include "../pal.h"

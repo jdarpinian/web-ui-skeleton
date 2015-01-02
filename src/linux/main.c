@@ -14,18 +14,14 @@
  * limitations under the License.
  */
 
-self.postMessage = self.webkitPostMessage || self.mozPostMessage || self.oPostMessage || self.msPostMessage || self.postMessage;
-var getMs = function() {
-  return new Date().getTime();
+#include <stdlib.h>
+#include "../server.h"
+
+int main(int argc, const char **argv)
+{
+  clioptions opts;
+  parse_commandline(argc, argv, &opts);
+  run_server(&opts);
+  return 0;
 }
-self.onmessage = function(e) {
-  if (e.data.test == 'transferables') {
-    self.postMessage(e.data, [e.data.buffer]);
-  } else if (e.data.test == 'spin') {
-    var start = getMs();
-    while (getMs() - e.data.lengthMs < start);
-    self.postMessage(e.data);
-  } else {
-    console.error('unknown worker message: ' + e.data.test);
-  }
-};
+
