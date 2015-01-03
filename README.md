@@ -6,9 +6,9 @@ Windows, Mac, and Linux, with Visual Studio, XCode, and Makefiles respectively.
 Running the server will automatically open a browser tab showing the UI.
 When all UI pages are closed, the server will automatically exit.
 
-The UI can communicate with the server by making HTTP requests and receiving
-JSON responses. The server can use custom request handlers to perform any task
-requested by the UI using native code.
+The UI can communicate with the server by making HTTP requests. The server can
+use custom request handlers to perform any task requested by the UI using native
+code.
 
 In debug mode, static files in the html directory are served directly from the
 filesystem to support edit-refresh debugging. In release mode the static files

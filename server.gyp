@@ -17,7 +17,6 @@
           'action_name': 'package html files',
           'inputs': [
             'files-to-c-arrays.py',
-            'html/compatibility.js',
             'html/index.html',
             'html/keep-server-alive.js',
           ],

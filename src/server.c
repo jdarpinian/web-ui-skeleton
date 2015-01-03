@@ -115,6 +115,28 @@ volatile long keep_alives = 0;
 
 static int mongoose_begin_request_callback(struct mg_connection *connection) {
   const struct mg_request_info *request_info = mg_get_request_info(connection);
+  // Before we do anything else check the Referer for CSRF protection. We don't
+  // want random web pages to be able to make requests to our server. By
+  // rejecting all non-trusted requests here we can avoid having to secure the
+  // rest of the server code against attackers.
+  // Only the root of the server can be requested without a valid Referer. Note
+  // that this means the root page must be free of XSS vulnerabilities, as XSS
+  // there would allow circumventing the Referer check.
+  if (strcmp(request_info->uri, "/") != 0) {
+    const char *referer = mg_get_header(connection, "Referer");
+    if (!referer || strncmp("http://localhost:5578/", referer, 22) != 0) {
+      // Referer is either not present or not our server.
+      mg_printf(connection, "HTTP/1.1 403 Forbidden\r\n"
+                "Cache-Control: no-cache\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Content-Length: 80\r\n"
+                "Connection: close\r\n\r\n"
+                "<h1>Error 403 Forbidden: invalid Referer.</h1>"
+                "<a href=/>Go back to the root.</a>");
+      return 1;
+    }
+  }
+  
   if (strcmp(request_info->uri, "/keepServerAlive") == 0) {
     __sync_fetch_and_add(&keep_alives, 1);
     mg_printf(connection, "HTTP/1.1 200 OK\r\n"
@@ -136,13 +158,13 @@ static int mongoose_begin_request_callback(struct mg_connection *connection) {
     return 1;
   } else {
 #ifdef NDEBUG
-    // In release mode, we embed the test files in the executable and serve
-    // them from memory. This makes the test easier to distribute as it is
+    // In release mode, we embed the static files in the executable and serve
+    // them from memory. This makes the binary easier to distribute as it is
     // a standalone executable file with no other dependencies.
     serve_file_from_memory_or_404(connection);
     return 1;
 #else
-    // In debug mode, we serve the test files directly from the filesystem for
+    // In debug mode, we serve the static files directly from the filesystem for
     // ease of development. Mongoose handles file serving for us.
     return 0;
 #endif
